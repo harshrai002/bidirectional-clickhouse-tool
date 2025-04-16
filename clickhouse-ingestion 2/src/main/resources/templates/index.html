@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Bidirectional Ingestion Tool</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .form-section { margin-bottom: 20px; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+    <script>
+        function toggleForms() {
+            const direction = document.getElementById('direction').value;
+            document.getElementById('chToFfForm').style.display = (direction === 'CH_TO_FF') ? 'block' : 'none';
+            document.getElementById('ffToChForm').style.display = (direction === 'FF_TO_CH') ? 'block' : 'none';
+        }
+        window.onload = toggleForms;
+    </script>
+</head>
+<body>
+<h1>Clickhouse Bidirectional Ingestion Tool</h1>
+
+<div th:if="${errorMessage}" class="error" th:text="${errorMessage}"></div>
+<div th:if="${successMessage}" class="success" th:text="${successMessage}"></div>
+
+<div class="form-section">
+    <label for="direction">Direction:</label>
+    <select id="direction" name="direction" onchange="toggleForms()">
+        <option value="" th:selected="${direction == null}">--Select--</option>
+        <option value="CH_TO_FF" th:selected="${direction == 'CH_TO_FF'}">ClickHouse to Flat File</option>
+        <option value="FF_TO_CH" th:selected="${direction == 'FF_TO_CH'}">Flat File to ClickHouse</option>
+    </select>
+</div>
+
+<!-- ClickHouse to Flat File Form -->
+<div id="chToFfForm" class="form-section" style="display:none;">
+    <h2>ClickHouse to Flat File</h2>
+    <form th:action="@{/ingest}" method="post">
+        <input type="hidden" name="direction" value="CH_TO_FF"/>
+        <div>
+            <label for="host">Host:</label>
+            <input type="text" id="host" name="host" th:value="${clickHouseConfig?.host ?: ''}"/>
+        </div>
+        <div>
+            <label for="port">Port:</label>
+            <input type="number" id="port" name="port" th:value="${clickHouseConfig?.port ?: ''}"/>
+        </div>
+        <div>
+            <label for="database">Database:</label>
+            <input type="text" id="database" name="database" th:value="${clickHouseConfig?.database ?: ''}"/>
+        </div>
+        <div>
+            <label for="user">User:</label>
+            <input type="text" id="user" name="user" th:value="${clickHouseConfig?.user ?: ''}"/>
+        </div>
+        <div>
+            <label for="password">Password:</label>
+            <input type="text" id="password" name="password" th:value="${clickHouseConfig?.password ?: ''}"/>
+        </div>
+        <div>
+            <label for="protocol">Protocol:</label>
+            <select id="protocol" name="protocol">
+                <option value="http">http</option>
+                <option value="https" selected>https</option>
+            </select>
+        </div>
+
+        <button type="submit" name="action" value="connect">Connect</button>
+    </form>
+
+    <div th:if="${tables != null}">
+        <form th:action="@{/ingest}" method="post">
+            <input type="hidden" name="direction" value="CH_TO_FF"/>
+            <input type="hidden" name="host" th:value="${clickHouseConfig?.host ?: ''}"/>
+            <input type="hidden" name="port" th:value="${clickHouseConfig?.port ?: ''}"/>
+            <input type="hidden" name="database" th:value="${clickHouseConfig?.database ?: ''}"/>
+            <input type="hidden" name="user" th:value="${clickHouseConfig?.user ?: ''}"/>
+            <input type="hidden" name="password" th:value="${clickHouseConfig?.password ?: ''}"/>
+            <label for="table">Select Table:</label>
+            <select id="table" name="table" required>
+                <option value="">--Select Table--</option>
+                <option th:each="table : ${tables}" th:value="${table}" th:text="${table}"></option>
+            </select>
+            <button type="submit" name="action" value="loadColumns">Load Columns</button>
+        </form>
+    </div>
+
+    <div th:if="${columns != null}">
+        <form th:action="@{/ingest}" method="post">
+            <input type="hidden" name="direction" value="CH_TO_FF"/>
+            <input type="hidden" name="host" th:value="${clickHouseConfig?.host ?: ''}"/>
+            <input type="hidden" name="port" th:value="${clickHouseConfig?.port ?: ''}"/>
+            <input type="hidden" name="database" th:value="${clickHouseConfig?.database ?: ''}"/>
+            <input type="hidden" name="user" th:value="${clickHouseConfig?.user ?: ''}"/>
+            <input type="hidden" name="jwtToken" th:value="${clickHouseConfig?.jwtToken ?: ''}"/>
+            <input type="hidden" name="table" th:value="${selectedTable ?: ''}"/>
+            <h3>Select Columns:</h3>
+            <div th:each="column : ${columns}">
+                <input type="checkbox" name="selectedColumns" th:value="${column}" th:id="'col-' + ${column}"/>
+                <label th:for="'col-' + ${column}" th:text="${column}"></label>
+            </div>
+            <button type="submit" name="action" value="startIngestion">Start Ingestion</button>
+        </form>
+    </div>
+</div>
+
+<!-- Flat File to ClickHouse Form -->
+<!--<div id="ffToChForm" class="form-section" style="display:none;">-->
+<!--    <h2>Flat File to ClickHouse</h2>-->
+<!--    <form th:action="@{/ingest}" method="post" enctype="multipart/form-data">-->
+<!--        <input type="hidden" name="direction" value="FF_TO_CH"/>-->
+<!--        <div>-->
+<!--            <label for="file">Upload CSV:</label>-->
+<!--            <input type="file" id="file" name="file" accept=".csv" required/>-->
+<!--        </div>-->
+<!--        <div>-->
+<!--            <label for="delimiter">Delimiter:</label>-->
+<!--            <input type="text" id="delimiter" name="delimiter" th:value="${flatFileConfig?.delimiter ?: ','}" placeholder=","/>-->
+<!--        </div>-->
+<!--        <button type="submit" name="action" value="uploadFile">Upload File</button>-->
+<!--    </form>-->
+
+<!--    <div th:if="${columns != null}">-->
+<!--        <form th:action="@{/ingest}" method="post">-->
+<!--            <input type="hidden" name="direction" value="FF_TO_CH"/>-->
+<!--            <input type="hidden" name="delimiter" th:value="${flatFileConfig?.delimiter ?: ','}"/>-->
+<!--            <h3>Select Columns:</h3>-->
+<!--            <div th:each="column : ${columns}">-->
+<!--                <input type="checkbox" name="selectedColumns" th:value="${column}" th:id="'col-' + ${column}"/>-->
+<!--                <label th:for="'col-' + ${column}" th:text="${column}"></label>-->
+<!--            </div>-->
+<!--            <input type="hidden" name="host" th:value="${clickHouseConfig?.host ?: ''}"/>-->
+<!--            <input type="hidden" name="port" th:value="${clickHouseConfig?.port ?: ''}"/>-->
+<!--            <input type="hidden" name="database" th:value="${clickHouseConfig?.database ?: ''}"/>-->
+<!--            <input type="hidden" name="user" th:value="${clickHouseConfig?.user ?: ''}"/>-->
+<!--            <input type="hidden" name="jwtToken" th:value="${clickHouseConfig?.jwtToken ?: ''}"/>-->
+<!--            <button type="submit" name="action" value="startIngestion">Start Ingestion</button>-->
+<!--        </form>-->
+<!--    </div>-->
+<!--</div>-->
+
+
+<div id="ffToChForm" class="form-section" style="display:none;">
+    <h2>Flat File to ClickHouse</h2>
+
+    <!-- Step 1: Upload File -->
+    <form th:action="@{/ingest}" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="direction" value="FF_TO_CH"/>
+        <div>
+            <label for="file">Upload CSV:</label>
+            <input type="file" id="file" name="file" accept=".csv" required/>
+        </div>
+        <div>
+            <label for="delimiter">Delimiter:</label>
+            <input type="text" id="delimiter" name="delimiter" th:value="${flatFileConfig?.delimiter ?: ','}" placeholder=","/>
+        </div>
+        <button type="submit" name="action" value="uploadFile">Upload File</button>
+    </form>
+
+    <!-- Step 2: Select Columns and Provide ClickHouse Info -->
+    <div th:if="${columns != null}">
+        <form th:action="@{/ingest}" method="post">
+            <input type="hidden" name="direction" value="FF_TO_CH"/>
+            <input type="hidden" name="delimiter" th:value="${flatFileConfig?.delimiter ?: ','}"/>
+
+            <h3>Select Columns:</h3>
+            <div th:each="column : ${columns}">
+                <input type="checkbox" name="selectedColumns" th:value="${column}" th:id="'col-' + ${column}"/>
+                <label th:for="'col-' + ${column}" th:text="${column}"></label>
+            </div>
+
+            <h3>ClickHouse Connection Details:</h3>
+            <div>
+                <label for="host">Host:</label>
+                <input type="text" id="host" name="host" placeholder="Host" required/>
+            </div>
+            <div>
+                <label for="port">Port:</label>
+                <input type="number" id="port" name="port" placeholder="Port" required/>
+            </div>
+            <div>
+                <label for="database">Database:</label>
+                <input type="text" id="database" name="database" placeholder="Database" required/>
+            </div>
+            <div>
+                <label for="user">User:</label>
+                <input type="text" id="user" name="user" placeholder="Username" required/>
+            </div>
+            <div>
+                <label for="tae~VfBI.2LDE">Password:</label>
+                <input type="password" id="tae~VfBI.2LDE" name="tae~VfBI.2LDE" placeholder="Password" required/>
+            </div>
+
+            <button type="submit" name="action" value="startIngestion">Start Ingestion</button>
+        </form>
+    </div>
+</div>
+
+
+</body>
+</html>
